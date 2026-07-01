@@ -37,7 +37,7 @@ kompas-guard doctor   # diagnose SDK/service wiring
 
 Windows pip wheel release (v0.5.1+): install the Windows x64 wheel and use the
 normal CLI/SDK entry points. The wheel contains a thin Python SDK plus an
-embedded source-free Nuitka runtime under `kompas_guard/_app`.
+embedded compiled Nuitka runtime under `kompas_guard/_app`.
 
 ```cmd
 pip install kompas_3d_guard-0.5.1-py3-none-win_amd64.whl
@@ -58,7 +58,7 @@ kompas-guard.exe status
 kompas-guard.exe down
 ```
 
-The portable ZIP and embedded wheel runtime are source-free: root
+The portable ZIP and embedded wheel use a compiled runtime: root
 `kompas-guard.exe` or the SDK wrapper dispatches to
 `kompas-guard-runtime\kompas-guard-runtime.exe` (Nuitka). Do **not** call the
 runtime exe directly unless debugging; use `kompas-guard.exe` / `.cmd`, the
