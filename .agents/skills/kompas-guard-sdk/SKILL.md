@@ -35,16 +35,19 @@ kompas-guard status   # context, runner, optional embed, KOMPAS install path
 kompas-guard doctor   # diagnose SDK/service wiring
 ```
 
-Windows pip wheel release (v0.5.1+): install the Windows x64 wheel and use the
-normal CLI/SDK entry points. The wheel contains a thin Python SDK plus an
-embedded compiled Nuitka runtime under `kompas_guard/_app`.
+Windows PyPI wheel release (v0.5.1+): install from PyPI and use the normal
+CLI/SDK entry points. The wheel contains a thin Python SDK plus an embedded
+compiled Nuitka runtime under `kompas_guard/_app`.
 
 ```cmd
-pip install kompas_3d_guard-0.5.1-py3-none-win_amd64.whl
+pip install kompas-3d-guard
 kompas-guard up
 kompas-guard status
 kompas-guard down
 ```
+
+For local release-asset testing, installing the downloaded wheel file is also
+valid: `pip install kompas_3d_guard-0.5.1-py3-none-win_amd64.whl`.
 
 Python compatibility for this wheel: CPython 3.10–3.14 on Windows x64. It is not
 for Linux/macOS, 32-bit Windows, or Windows ARM64. `Client()` auto-discovers the
@@ -65,9 +68,13 @@ runtime exe directly unless debugging; use `kompas-guard.exe` / `.cmd`, the
 installed `kompas-guard` console script, or SDK `Client(...)`.
 
 `up` resolves app dir from embedded wheel runtime, `--app-dir`, `KOMPAS_APP_DIR`,
-config, executable bundle root or CWD. Grounding/verify Tier0/1 work without
-live KOMPAS; live `run` needs Windows + registered KOMPAS COM. Optional
-dense/llama embedding is only for A/B: `kompas-guard up --with-embed`.
+config, executable bundle root or CWD. Default `kompas-guard up` starts the
+context service plus local runner; it does **not** start the optional embed/
+llama.cpp server. For SDK usage, `Client(autostart=True)` can start the default
+services lazily on the first request, so an explicit `kompas-guard up` is mainly
+for CLI sessions or when you want services pre-warmed. Grounding/verify Tier0/1
+work without live KOMPAS; live `run` needs Windows + registered KOMPAS COM.
+Optional dense/llama embedding is only for A/B: `kompas-guard up --with-embed`.
 
 ## Candidate contract
 
@@ -231,7 +238,8 @@ Resolution order: explicit `Client(...)` args → env → embedded wheel runtime
 defaults.
 
 ```python
-# v0.5.1+ pip-installed Windows wheel: auto-discovers embedded compiled runtime.
+# v0.5.1+ PyPI-installed Windows wheel: auto-discovers embedded compiled runtime.
+# No explicit `kompas-guard up` is required for SDK flows; autostart is lazy.
 kg = Client(autostart=True)
 
 # Already-running remote/local services:

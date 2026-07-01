@@ -28,17 +28,13 @@
 
 ## Установка
 
-Откройте страницу последнего релиза:
+Установите пакет из PyPI обычной командой `pip`:
 
-<https://github.com/dwnmf/kompas-3d-guard-bin/releases/latest>
-
-Скачайте wheel:
-
-```text
-kompas_3d_guard-0.5.1-py3-none-win_amd64.whl
+```bash
+pip install kompas-3d-guard
 ```
 
-Установите его обычной командой `pip`:
+Для установки конкретного wheel-файла из GitHub Releases можно использовать:
 
 ```bash
 pip install kompas_3d_guard-0.5.1-py3-none-win_amd64.whl
@@ -51,7 +47,7 @@ SDK `kompas_guard`.
 
 ## Быстрый старт через CLI
 
-Запустите локальный context service и runner:
+Для интерактивной работы через CLI удобно один раз поднять локальные сервисы:
 
 ```bash
 kompas-guard up
@@ -75,7 +71,8 @@ kompas-guard context --task "Проверить доступность IApplicat
 kompas-guard down
 ```
 
-В `status` ожидается состояние `OK` для context service и local runner. Для live
+В `status` ожидается состояние `OK` для context service и local runner. Optional
+embed/llama.cpp сервер при обычном `kompas-guard up` не запускается. Для live
 операций требуется установленный КОМПАС-3D с зарегистрированным COM API.
 
 ---
@@ -144,6 +141,7 @@ print(r.result_repr)
 
 | Компонент | Значение |
 | --- | --- |
+| PyPI package | `kompas-3d-guard` |
 | Wheel | `kompas_3d_guard-0.5.1-py3-none-win_amd64.whl` |
 | ОС | Windows x64 |
 | Python | CPython 3.10, 3.11, 3.12, 3.13, 3.14 |
@@ -154,7 +152,7 @@ print(r.result_repr)
 
 ## Состав wheel
 
-Wheel устанавливает Python SDK/CLI-обвязку `kompas_guard`, встроенный
+Пакет устанавливает Python SDK/CLI-обвязку `kompas_guard`, встроенный
 скомпилированный Nuitka runtime и обработанные runtime-данные для API/GOST
 grounding. Пользовательский сценарий остаётся стандартным: установка через
 `pip`, запуск через `kompas-guard` или импорт через `from kompas_guard import
