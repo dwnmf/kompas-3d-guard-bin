@@ -1,20 +1,49 @@
-# KOMPAS-3D_GUARD Binary Distribution
+# KOMPAS-3D_GUARD
 
-Binary-only public distribution for **KOMPAS-3D_GUARD**.
+Публичная бинарная сборка **KOMPAS-3D_GUARD** для пользователей и агентов,
+которые работают с КОМПАС-3D через Python SDK/COM.
 
-This repository contains release metadata, agent skill instructions, and GitHub
-Release assets. It does **not** contain the private source packages that implement
-the verifier, context service, graph/GOST engines, or live runner.
+Репозиторий содержит только:
 
-## Install
+- готовый wheel в разделе **Releases**;
+- краткую пользовательскую документацию;
+- skill для pi/agent: `.agents/skills/kompas-guard-sdk/SKILL.md`.
 
-Download the wheel from the latest GitHub Release and install it:
+Исходный код внутренних сервисов, verifier, runner, GOST/API engines и private
+Python-пакеты здесь не публикуются.
 
-```bash
-pip install kompas_3d_guard-0.5.1-py3-none-win_amd64.whl
-```
+## Что это даёт
 
-Then use either the CLI:
+KOMPAS-3D_GUARD помогает агенту или Python-скрипту безопаснее работать с
+КОМПАС-3D SDK:
+
+- подсказывает реальные интерфейсы, методы, свойства и enum'ы KOMPАС API;
+- проверяет Python COM-код до запуска;
+- запускает код в живом КОМПАС-3D через локальный runner;
+- классифицирует ошибки COM/HRESULT/null-state;
+- даёт grounding по ГОСТ / ЕСКД / СПДС, включая актуальность стандартов.
+
+## Установка
+
+1. Откройте страницу релиза:
+
+   <https://github.com/dwnmf/kompas-3d-guard-bin/releases/latest>
+
+2. Скачайте wheel:
+
+   ```text
+   kompas_3d_guard-0.5.1-py3-none-win_amd64.whl
+   ```
+
+3. Установите:
+
+   ```bash
+   pip install kompas_3d_guard-0.5.1-py3-none-win_amd64.whl
+   ```
+
+После установки доступны CLI и Python SDK.
+
+## Быстрая проверка
 
 ```bash
 kompas-guard up
@@ -23,50 +52,97 @@ kompas-guard context --task "Проверить доступность IApplicat
 kompas-guard down
 ```
 
-or the Python SDK:
+Ожидаемо в `status` должны быть `OK` для context service и local runner.
+Live runner требует установленный и зарегистрированный КОМПАС-3D.
+
+## Использование из Python
 
 ```python
 from kompas_guard import Client
 
 kg = Client(autostart=True)
-print(kg.health().ok)
+
+health = kg.health()
+print(health.ok)
+print(health.feedback)
+
+ctx = kg.context("Получить имя активного документа КОМПАС-3D")
+print(ctx.feedback)
 ```
 
-The SDK auto-discovers the embedded compiled runtime installed into:
+После установки wheel `Client()` автоматически находит встроенный compiled
+runtime в:
 
 ```text
 site-packages/kompas_guard/_app
 ```
 
-## Supported platform
+Указывать `app_dir` обычно не нужно.
 
-The current wheel is:
+## Проверка и запуск candidate.py
+
+Файл-кандидат должен содержать функцию:
+
+```python
+def run(app):
+    # app — live IApplication COM object КОМПАС-3D
+    doc = app.ActiveDocument
+    return doc.Name
+```
+
+Дальше:
+
+```python
+from kompas_guard import Client
+
+kg = Client(autostart=True)
+
+v = kg.verify_file("candidate.py")
+if not v.ok:
+    print(v.feedback)
+    raise SystemExit(1)
+
+r = kg.run_file("candidate.py", setup=["kompas_running"], risk="read")
+print(r.ok)
+print(r.result_repr)
+```
+
+## Поддерживаемые версии Python и Windows
+
+Текущий wheel:
 
 ```text
 kompas_3d_guard-0.5.1-py3-none-win_amd64.whl
 ```
 
-Compatibility:
+Подходит для:
 
-- Windows x64 only
-- CPython 3.10, 3.11, 3.12, 3.13, 3.14
-- Requires local KOMPAS-3D COM installation for live runner operations
+- Windows x64;
+- CPython 3.10;
+- CPython 3.11;
+- CPython 3.12;
+- CPython 3.13;
+- CPython 3.14.
 
-Not supported by this wheel:
+Не подходит для:
 
-- Linux/macOS
-- 32-bit Windows
-- Windows ARM64
+- Linux;
+- macOS;
+- 32-битной Windows;
+- Windows ARM64.
 
-## What is inside the wheel
+Для live-запусков нужен установленный КОМПАС-3D с зарегистрированным COM API.
+Проверено на КОМПАС-3D v24.
 
-The wheel contains:
+## Что внутри wheel
 
-- a thin Python SDK/CLI wrapper: `kompas_guard`
-- an embedded source-free Nuitka runtime under `kompas_guard/_app`
-- processed runtime data needed by the local service
+Wheel содержит:
 
-The wheel does not ship private Python source packages such as:
+- тонкую Python SDK/CLI-обвязку `kompas_guard`;
+- встроенный source-free Nuitka runtime;
+- обработанные runtime-данные для API/GOST grounding.
+
+Приватные исходники внутренних сервисов не включены:
 
 ```text
 serve/
@@ -74,32 +150,48 @@ runner_service/
 scripts/
 ```
 
-## Agent skill
+## Skill для агентов
 
-The pi/agent skill is included at:
+Skill находится здесь:
 
 ```text
 .agents/skills/kompas-guard-sdk/SKILL.md
 ```
 
-Use it when writing or verifying Python COM code against the KOMPAS-3D SDK, or
-when grounding answers in KOMPAS API / ГОСТ / ЕСКД / СПДС facts.
+Используйте его, когда агент пишет или проверяет Python COM-код для КОМПАС-3D,
+или когда нужны grounded-факты по KOMPAS API / ГОСТ / ЕСКД / СПДС.
 
-## Release integrity
+## Проверка целостности
 
-Each release includes a `.sha256` file next to the wheel. Verify with:
-
-```bash
-certutil -hashfile kompas_3d_guard-0.5.1-py3-none-win_amd64.whl SHA256
-```
-
-Expected SHA256 for v0.5.1:
+Для v0.5.1 SHA256 wheel:
 
 ```text
 e368b1d9b04dcba65c5bbe6fb2d91a372fe6e84ad240737ddf1738f26cd9fa61
 ```
 
-## Upstream
+Проверить в Windows:
 
-Source development happens in the private/source repository. This repository is
-intended for binary releases and agent-consumable documentation only.
+```cmd
+certutil -hashfile kompas_3d_guard-0.5.1-py3-none-win_amd64.whl SHA256
+```
+
+## Частые команды
+
+```bash
+kompas-guard up                 # запустить context service + runner
+kompas-guard status             # проверить состояние
+kompas-guard doctor             # диагностика окружения
+kompas-guard context --task "..."
+kompas-guard verify --file candidate.py
+kompas-guard run --file candidate.py --setup kompas_running
+kompas-guard down               # остановить сервисы
+```
+
+## Важно
+
+- Не запускайте `kompas-guard-runtime.exe` напрямую без необходимости.
+  Используйте `kompas-guard` или Python SDK.
+- Optional embed/llama.cpp сервер по умолчанию выключен. Он нужен только для
+  отдельных A/B-сценариев и запускается через `kompas-guard up --with-embed`.
+- Для юридически значимого применения стандартов проверяйте финальные требования
+  по официальным источникам.
