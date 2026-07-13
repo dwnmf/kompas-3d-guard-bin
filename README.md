@@ -13,7 +13,7 @@
 
 ---
 
-Защищённая Windows x64 сборка локального in-process SDK для поиска и проверки
+Windows x64 сборка SDK для поиска и проверки
 KOMPAS-3D API. SDK не поднимает HTTP-сервер, localhost endpoints, фоновые
 службы и не обращается к внешней LLM.
 
