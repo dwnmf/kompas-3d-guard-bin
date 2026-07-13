@@ -1,5 +1,6 @@
 <div align="center">
-<img width="1254" height="1254" alt="untitled_black" src="https://github.com/user-attachments/assets/dacf966f-e054-4750-82bb-a6924ac2e088" />
+<img width="1310" height="176" alt="image" src="https://github.com/user-attachments/assets/a2d11b0b-0290-41bc-af8f-00011cc0c164" />
+
 
 
 <strong>SDK для КОМПАС-3D под Windows x64</strong><br>
