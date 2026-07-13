@@ -1,6 +1,6 @@
 ---
 name: kompas-guard-sdk
-description: Находить, проверять и исполнять KOMPAS-3D API7 код через локальный direct Python SDK. Использовать для поиска RU/EN API members, точных сигнатур и get/set операций, enum-констант, acquisition/cast путей, GOST/ЕСКД текста, статической проверки Python и явно запрошенного live-запуска КОМПАС. Никогда не угадывать API или числовые константы из памяти.
+description: Находить, проверять и исполнять KOMPAS-3D API7 код через локальный direct Python SDK. Использовать для поиска RU/EN API members, точных сигнатур и get/set операций, enum-констант, acquisition/cast путей, GOST/ЕСКД, статической проверки Python и явно запрошенного live-запуска с проверкой геометрической семантики. Никогда не угадывать API, координаты или числовые константы из памяти.
 ---
 
 # KOMPAS Guard SDK
@@ -16,8 +16,6 @@ description: Находить, проверять и исполнять KOMPAS-3
 python -m pip install -U kompas-3d-guard==0.6.2
 ```
 
-Для читаемого RU-вывода в консоли: `PYTHONUTF8=1 PYTHONIOENCODING=utf-8`.
-
 При первом `KompasGuard()` SDK скачивает закреплённый Core snapshot, сообщает
 этапы через callback `status` и проверяет SHA-256. Затем использует локальный
 кэш. Не запрашивать и не встраивать Hugging Face token.
@@ -28,12 +26,8 @@ python -m pip install -U kompas-3d-guard==0.6.2
 2. Собрать все RU/EN вопросы к API и вызвать один `batch(queries, k=5)`.
 3. Проверить 1–3 лучших результата. Вызывать `batch.inspect(...)`, если близки
    scores, неоднозначен owner, есть get/set или путь помечен `partial:`.
-   `inspect` принимает только `IType.Member` или stable_ref; голое имя типа
-   (`ILineSegment`) невалидно — искать члены типа через batch `IType.`.
 4. Получить числовые значения только через `enum_values`, `constant` или
    `constants`; получить application-domain таблицы через `app_const`.
-   Если имя enum известно — сразу `enum_values`; `constants(query)` только
-   когда enum неизвестен.
 5. Получить отсутствующий interface путь через `path`; изучить совместимые
    интерфейсы через `coclass`. Не придумывать cast при `found=false`.
 6. Написать новый candidate с `def run(app)` и проверить его через
@@ -71,9 +65,7 @@ def run(app):
     return value
 ```
 
-Использовать `cast(value, "IInterface")`, предоставляемый worker. Статический
-линтер пометит `cast` как undefined (F821) — это ожидаемый false-positive, не
-чинить импортом или заглушкой; источник истины — graph-`verify`. Не
+Использовать `cast(value, "IInterface")`, предоставляемый worker. Не
 импортировать `win32com`, не открывать `gen_py`, Interop DLL или raw graph.
 Возвращаемое значение должно быть компактным и сериализуемым либо иметь
 безопасный `repr`.
@@ -144,9 +136,9 @@ document → top part → model container → base plane → sketch
 → edit geometry → feature → rebuild/check → save
 ```
 
-Recipe не готовый скрипт: сохранять stable ref, signature, constants и cast
-provenance. Различать соседние свойства (`ICircle.Xc/Yc` — центр, `X/Y` —
-точка). Проверять bool `Update`, `Valid`, `RebuildDocument`; `Count` ≠ тело.
+Не считать recipe готовым скриптом: для каждого выбранного symbol сохранить
+stable ref, signature, constants и cast provenance. Размеры и геометрия детали
+в recipe отсутствуют.
 
 ## Verify
 
@@ -165,6 +157,32 @@ print(proof.feedback)
 что сложная Python-конструкция не получила compiler proof. Исправлять только
 участок, указанный строкой и diagnostic code.
 
+## Геометрическая семантика и live-пробы
+
+`verify()` доказывает API-форму, но не положение, связность или качество тела.
+Перед сложной моделью выполнить минимальную live-пробу спорной геометрии и
+прочитать значения обратно. Найденные и подтверждённые API7-инварианты:
+
+- `ICircle.Xc/Yc` — центр; `X/Y` — точка окружности. Задавать согласованно:
+  `Xc=cx, Yc=cy, X=cx+r, Y=cy, Radius=r`, затем проверять getters, `Valid`,
+  `Update()` и выдавливание. Не использовать `X/Y` как центр.
+- `IRectangle.X/Y` — нижний левый угол, не центр. Для центра `(cx, cy)` задавать
+  `X=cx-w/2, Y=cy-h/2`; подтверждать вершины через
+  `IRectangle.ContourSegmentsPoints`.
+- На базовой XOZ локальная ось эскиза `+Y` направлена по глобальной `-Z`.
+  Глобальной высоте `z` соответствует локальная координата `y=-z`.
+  Проверять контрольные точки через `ISketch.GetPoint3D`.
+- Для доказанного reverse extrusion использовать reverse side parameters:
+  `Direction=dtReverse` и `SetSideParameters(False, ...)`; для normal — `True`.
+  Middle-plane применять только после отдельной live-пробы.
+
+Каждый `Update()`, `EndEdit()`, `SetSideParameters()` и `Valid` проверять явно;
+при `false` бросать исключение до `SaveAs`. После построения скрыть эскизы и
+проверить `RebuildModel`. Успешные COM-вызовы ещё не доказывают единое тело:
+если Guard доказал путь, дополнительно проверять число тел, `OperationResult`
+и `IBody7.GetGabarit`. Проверка результата должна контролировать ожидаемые
+глобальные точки/габариты, а не только счётчики операций и факт сохранения.
+
 ## Live run, check и cleanup
 
 Запускать только по явному запросу пользователя:
@@ -173,7 +191,7 @@ print(proof.feedback)
 result = kg.run(
     code,
     timeout_s=45,
-    check="""def check(app, ok):\n    return ok is True""",
+    check="""def check(app, value):\n    return bool(value)""",
     cleanup="created",
 )
 print(kg.classify(result, task=task, code=code).feedback)
@@ -183,8 +201,9 @@ print(kg.classify(result, task=task, code=code).feedback)
 - `run.check_ok`: read-only `check(app)` или `check(app, value)` подтвердил
   ожидаемый результат в той же COM-сессии.
 - `run.successful`: `ok` и, если check задан, `check_ok` истинны.
-- cleanup: `none` ничего не закрывает; `created_unsaved` закрывает созданные
-  несохранённые; `created` — все созданные этим запуском документы.
+- `cleanup="none"`: ничего не закрывать.
+- `cleanup="created_unsaved"`: закрыть только созданные несохранённые документы.
+- `cleanup="created"`: закрыть только документы, созданные этим запуском.
 
 Никогда не закрывать документы, существовавшие до snapshot worker.
 
