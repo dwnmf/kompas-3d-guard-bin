@@ -1,7 +1,7 @@
 <div align="center">
 <img width="2804" height="266" alt="KOMPAS-3D_GUARD_CondensedBold" src="https://github.com/user-attachments/assets/9ed1e9b9-f19e-4e47-80f7-80f555895bfb" />
 
-<strong>Защищённый in-process SDK для КОМПАС-3D под Windows x64</strong><br>
+<strong>SDK для КОМПАС-3D под Windows x64</strong><br>
 Поиск KOMPAS API, проверка Python COM-кода и grounding по ГОСТ/ЕСКД/СПДС.
 
 <p>
