@@ -16,6 +16,8 @@ description: Находить, проверять и исполнять KOMPAS-3
 python -m pip install -U kompas-3d-guard==0.6.2
 ```
 
+Для читаемого RU-вывода в консоли: `PYTHONUTF8=1 PYTHONIOENCODING=utf-8`.
+
 При первом `KompasGuard()` SDK скачивает закреплённый Core snapshot, сообщает
 этапы через callback `status` и проверяет SHA-256. Затем использует локальный
 кэш. Не запрашивать и не встраивать Hugging Face token.
@@ -26,8 +28,12 @@ python -m pip install -U kompas-3d-guard==0.6.2
 2. Собрать все RU/EN вопросы к API и вызвать один `batch(queries, k=5)`.
 3. Проверить 1–3 лучших результата. Вызывать `batch.inspect(...)`, если близки
    scores, неоднозначен owner, есть get/set или путь помечен `partial:`.
+   `inspect` принимает только `IType.Member` или stable_ref; голое имя типа
+   (`ILineSegment`) невалидно — искать члены типа через batch `IType.`.
 4. Получить числовые значения только через `enum_values`, `constant` или
    `constants`; получить application-domain таблицы через `app_const`.
+   Если имя enum известно — сразу `enum_values`; `constants(query)` только
+   когда enum неизвестен.
 5. Получить отсутствующий interface путь через `path`; изучить совместимые
    интерфейсы через `coclass`. Не придумывать cast при `found=false`.
 6. Написать новый candidate с `def run(app)` и проверить его через
@@ -65,7 +71,9 @@ def run(app):
     return value
 ```
 
-Использовать `cast(value, "IInterface")`, предоставляемый worker. Не
+Использовать `cast(value, "IInterface")`, предоставляемый worker. Статический
+линтер пометит `cast` как undefined (F821) — это ожидаемый false-positive, не
+чинить импортом или заглушкой; источник истины — graph-`verify`. Не
 импортировать `win32com`, не открывать `gen_py`, Interop DLL или raw graph.
 Возвращаемое значение должно быть компактным и сериализуемым либо иметь
 безопасный `repr`.
@@ -136,9 +144,9 @@ document → top part → model container → base plane → sketch
 → edit geometry → feature → rebuild/check → save
 ```
 
-Не считать recipe готовым скриптом: для каждого выбранного symbol сохранить
-stable ref, signature, constants и cast provenance. Размеры и геометрия детали
-в recipe отсутствуют.
+Recipe не готовый скрипт: сохранять stable ref, signature, constants и cast
+provenance. Различать соседние свойства (`ICircle.Xc/Yc` — центр, `X/Y` —
+точка). Проверять bool `Update`, `Valid`, `RebuildDocument`; `Count` ≠ тело.
 
 ## Verify
 
@@ -165,7 +173,7 @@ print(proof.feedback)
 result = kg.run(
     code,
     timeout_s=45,
-    check="""def check(app, value):\n    return bool(value)""",
+    check="""def check(app, ok):\n    return ok is True""",
     cleanup="created",
 )
 print(kg.classify(result, task=task, code=code).feedback)
@@ -175,9 +183,8 @@ print(kg.classify(result, task=task, code=code).feedback)
 - `run.check_ok`: read-only `check(app)` или `check(app, value)` подтвердил
   ожидаемый результат в той же COM-сессии.
 - `run.successful`: `ok` и, если check задан, `check_ok` истинны.
-- `cleanup="none"`: ничего не закрывать.
-- `cleanup="created_unsaved"`: закрыть только созданные несохранённые документы.
-- `cleanup="created"`: закрыть только документы, созданные этим запуском.
+- cleanup: `none` ничего не закрывает; `created_unsaved` закрывает созданные
+  несохранённые; `created` — все созданные этим запуском документы.
 
 Никогда не закрывать документы, существовавшие до snapshot worker.
 
