@@ -1,8 +1,8 @@
 <div align="center">
 <img width="2804" height="266" alt="KOMPAS-3D_GUARD_CondensedBold" src="https://github.com/user-attachments/assets/9ed1e9b9-f19e-4e47-80f7-80f555895bfb" />
 
-<strong>Бинарная pip-сборка KOMPAS-3D_GUARD для Windows x64</strong><br>
-Python SDK и CLI для работы агентов с КОМПАС-3D, KOMPAS API и ГОСТ/ЕСКД/СПДС grounding.
+<strong>Защищённый in-process SDK для КОМПАС-3D под Windows x64</strong><br>
+Поиск KOMPAS API, проверка Python COM-кода и grounding по ГОСТ/ЕСКД/СПДС.
 
 <p>
   <a href="https://github.com/dwnmf/kompas-3d-guard-bin/releases/latest">Скачать последнюю версию</a>
@@ -13,200 +13,155 @@ Python SDK и CLI для работы агентов с КОМПАС-3D, KOMPAS 
 
 ---
 
-## Назначение
-
-**KOMPAS-3D_GUARD** помогает Python-скриптам и coding-агентам безопаснее работать
-с КОМПАС-3D через COM/API. Guard подсказывает реальные интерфейсы, методы,
-свойства и enum'ы KOMPAS API, проверяет Python COM-код до запуска, выполняет код
-в живом КОМПАС-3D через локальный runner, классифицирует COM/HRESULT/null-state
-ошибки и даёт grounding по ГОСТ, ЕСКД и СПДС с учётом актуальности стандартов.
-
-Репозиторий ориентирован на пользователей бинарной сборки. Здесь доступны wheel
-для установки через `pip`, краткая документация и skill для pi/agent.
-
----
+Защищённая Windows x64 сборка локального in-process SDK для поиска и проверки
+KOMPAS-3D API. SDK не поднимает HTTP-сервер, localhost endpoints, фоновые
+службы и не обращается к внешней LLM.
 
 ## Установка
 
-Установите пакет из PyPI обычной командой `pip`:
+KOMPAS-3D Guard 0.6 работает с CPython 3.12 x64:
 
-```bash
-pip install kompas-3d-guard
+```powershell
+py -3.12 -m pip install --upgrade kompas-3d-guard
 ```
 
-Для установки конкретного wheel-файла из GitHub Releases можно использовать:
+Wheel также можно скачать из
+[GitHub Releases](https://github.com/dwnmf/kompas-3d-guard-bin/releases/latest):
 
-```bash
-pip install kompas_3d_guard-0.5.1-py3-none-win_amd64.whl
+```powershell
+py -3.12 -m pip install .\kompas_3d_guard-0.6.0-cp312-cp312-win_amd64.whl
 ```
 
-После установки становятся доступны консольная команда `kompas-guard` и Python
-SDK `kompas_guard`.
+Имя пакета в PyPI остаётся `kompas-3d-guard`, а имя Python-модуля —
+`kompas_guard`.
 
----
-
-## Быстрый старт через CLI
-
-Для интерактивной работы через CLI удобно один раз поднять локальные сервисы:
-
-```bash
-kompas-guard up
-```
-
-Проверьте состояние:
-
-```bash
-kompas-guard status
-```
-
-Выполните тестовый запрос к API grounding:
-
-```bash
-kompas-guard context --task "Проверить доступность IApplication.ActiveDocument"
-```
-
-Остановите сервисы после работы:
-
-```bash
-kompas-guard down
-```
-
-В `status` ожидается состояние `OK` для context service и local runner. Optional
-embed/llama.cpp сервер при обычном `kompas-guard up` не запускается. Для live
-операций требуется установленный КОМПАС-3D с зарегистрированным COM API.
-
----
-
-## Быстрый старт через Python
+## Первый запуск и загрузка моделей
 
 ```python
-from kompas_guard import Client
+from kompas_guard import KompasGuard
 
-kg = Client(autostart=True)
-
-health = kg.health()
-print(health.ok)
-print(health.feedback)
-
-ctx = kg.context("Получить имя активного документа КОМПАС-3D")
-print(ctx.feedback)
+guard = KompasGuard()
 ```
 
-После установки wheel клиент автоматически находит встроенный compiled runtime в
-каталоге установленного пакета:
+При первом запуске SDK скачивает закреплённый публичный Core V1 из
+`dwnmf/kompas-guard-sdk-core-v1`, показывает прогресс Hugging Face, проверяет
+размер и SHA-256 каждого файла и сохраняет snapshot в стандартный cache Hugging
+Face. Токен Hugging Face не требуется.
+
+Пример вывода:
 
 ```text
-site-packages/kompas_guard/_app
+KOMPAS Guard: downloading Core V1 from Hugging Face...
+Fetching 36 files: 100%|██████████| 36/36
+KOMPAS Guard: verifying Core V1 integrity...
+KOMPAS Guard: Core V1 ready.
 ```
 
-В обычном сценарии параметр `app_dir` оставляют пустым.
+Следующие запуски используют локальный cache:
 
----
+```text
+KOMPAS Guard: loading Core V1 from cache...
+KOMPAS Guard: verifying Core V1 integrity...
+KOMPAS Guard: Core V1 ready.
+```
 
-## Проверка и запуск candidate.py
-
-Файл-кандидат должен экспортировать функцию `run(app)`. Объект `app` — это live
-`IApplication` COM object КОМПАС-3D.
+Размер Core — около 251 МБ. Опциональный Top-3 quality pack занимает около
+324 МБ и скачивается только при явном включении:
 
 ```python
-def run(app):
-    doc = app.ActiveDocument
-    return doc.Name
+guard = KompasGuard(reranker_path="top3")
 ```
 
-Проверка и запуск выполняются через SDK:
+Настройки:
+
+```powershell
+$env:KOMPAS_GUARD_CACHE="D:\KOMPAS_GUARD_CACHE"
+$env:KOMPAS_GUARD_OFFLINE="1"       # использовать только существующий cache
+$env:KOMPAS_GUARD_BUNDLE="D:\Core" # явно указать распакованный Core
+$env:KOMPAS_GUARD_QUIET="1"         # скрыть статусные сообщения SDK
+```
+
+Приложение может направить статусы загрузки в собственный интерфейс:
 
 ```python
-from kompas_guard import Client
-
-kg = Client(autostart=True)
-
-v = kg.verify_file("candidate.py")
-if not v.ok:
-    print(v.feedback)
-    raise SystemExit(1)
-
-r = kg.run_file("candidate.py", setup=["kompas_running"], risk="read")
-print(r.ok)
-print(r.result_repr)
+guard = KompasGuard(status=my_status_callback)
 ```
 
-Для задач с документами удобно указывать setup-шаги, например
-`ensure_3d_doc`, `ensure_assembly_doc`, `ensure_drawing_doc` или
-`kompas_running`.
+## Поиск KOMPAS API
 
----
+```python
+from kompas_guard import KompasGuard
 
-## Совместимость
+guard = KompasGuard()
+batch = guard.batch(
+    ["сохранить текущий документ", "get circle radius"],
+    k=5,
+)
+print(batch.render("compact"))
+print(batch.inspect("Q1.R1"))
+```
 
-| Компонент | Значение |
-| --- | --- |
-| PyPI package | `kompas-3d-guard` |
-| Wheel | `kompas_3d_guard-0.5.1-py3-none-win_amd64.whl` |
-| ОС | Windows x64 |
-| Python | CPython 3.10, 3.11, 3.12, 3.13, 3.14 |
-| CAD runtime | КОМПАС-3D с зарегистрированным COM API |
-| Проверенная CAD-версия | КОМПАС-3D v24 |
+## Проверка кода и grounding для исправления
 
----
+```python
+check = guard.verify(
+    "def run(app):\n    doc = app.ActiveDocument\n    doc.Svae()\n",
+    task="сохранить текущий документ",
+)
+print(check.feedback)
+```
 
-## Состав wheel
+SDK возвращает диагностику настоящего Interop-компилятора/графа и кандидатов
+API, найденных нашим RU/EN retrieval. Он не вызывает LLM и не переписывает код
+автоматически.
 
-Пакет устанавливает Python SDK/CLI-обвязку `kompas_guard`, встроенный
-скомпилированный Nuitka runtime и обработанные runtime-данные для API/GOST
-grounding. Пользовательский сценарий остаётся стандартным: установка через
-`pip`, запуск через `kompas-guard` или импорт через `from kompas_guard import
-Client`.
+## Запуск в живом КОМПАС
 
----
+```python
+result = guard.run(code, setup=["kompas_running"])
+if not result.ok:
+    print(guard.classify(result, task=task, code=code).feedback)
+```
+
+Только `run` создаёт один изолированный локальный процесс. Поиск, ГОСТ,
+формирование контекста и проверка кода остаются прямыми in-process вызовами.
+Для live execution нужны Windows, установленный КОМПАС-3D и зарегистрированный
+COM ProgID `KOMPAS.Application.7`.
 
 ## Skill для агентов
 
-Skill для pi/agent расположен по пути:
+Актуальный skill находится в
+[`.agents/skills/kompas-guard-sdk`](.agents/skills/kompas-guard-sdk). В каждый
+GitHub Release также входит `kompas-guard-sdk-skill.zip`, который можно напрямую
+установить в каталог skills агента.
+
+Skill требует искать API через SDK, проверять неоднозначные результаты, вызывать
+verifier перед выдачей кода и никогда не угадывать имена KOMPAS API по памяти.
+
+## Состав релиза
 
 ```text
-.agents/skills/kompas-guard-sdk/SKILL.md
+kompas_3d_guard-<version>-cp312-cp312-win_amd64.whl
+kompas-guard-sdk-skill.zip
+SHA256SUMS.txt
 ```
 
-Его стоит подключать, когда агент пишет или проверяет Python COM-код для
-КОМПАС-3D, работает с KOMPAS API или должен отвечать на вопросы с grounding по
-ГОСТ, ЕСКД и СПДС.
+Wheel содержит единый скомпилированный Nuitka package, публичные type stubs,
+native launcher изолированного runner и не содержит приватных Python-исходников.
+Модели и индексы публикуются отдельно на Hugging Face под CC BY-NC 4.0 и
+закрепляются в SDK неизменяемыми commit revisions.
 
----
+## Переход с 0.5 на 0.6
 
-## Проверка целостности
+Версия 0.6 заменяет старую сервисную архитектуру:
 
-Для релиза `v0.5.1` SHA256 wheel равен:
+```python
+# удалённый API версии 0.5
+Client(autostart=True)
 
-```text
-e368b1d9b04dcba65c5bbe6fb2d91a372fe6e84ad240737ddf1738f26cd9fa61
+# прямой in-process API версии 0.6
+KompasGuard()
 ```
 
-Проверка в Windows выполняется командой:
-
-```cmd
-certutil -hashfile kompas_3d_guard-0.5.1-py3-none-win_amd64.whl SHA256
-```
-
----
-
-## Полезные команды
-
-| Команда | Назначение |
-| --- | --- |
-| `kompas-guard up` | Запустить context service и runner |
-| `kompas-guard status` | Проверить состояние сервисов и КОМПАС-3D |
-| `kompas-guard doctor` | Выполнить диагностику окружения |
-| `kompas-guard context --task "..."` | Получить API/GOST grounding по задаче |
-| `kompas-guard verify --file candidate.py` | Проверить Python COM-код до запуска |
-| `kompas-guard run --file candidate.py --setup kompas_running` | Запустить candidate.py через live runner |
-| `kompas-guard down` | Остановить сервисы |
-
----
-
-## Примечания
-
-Runtime запускается через `kompas-guard` или Python SDK. Optional embed/llama.cpp
-сервер предназначен для отдельных A/B-сценариев и включается командой
-`kompas-guard up --with-embed`. Для юридически значимого применения стандартов
-финальные требования следует сверять по официальным источникам.
+Команды и понятия `up`, `down`, `status`, `hosted_url`, `runner_url` и localhost
+services больше не используются.
