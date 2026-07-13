@@ -1,4 +1,4 @@
 interface:
   display_name: "KOMPAS Guard SDK"
-  short_description: "Ground and verify KOMPAS-3D API code"
-  default_prompt: "Use $kompas-guard-sdk to ground and verify this KOMPAS-3D API task."
+  short_description: "Ищет API, constants и cast-пути КОМПАС"
+  default_prompt: "Используй $kompas-guard-sdk, чтобы найти API и константы, проверить пути и код, а live-запуск выполнять только по явному запросу."
