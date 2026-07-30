@@ -21,7 +21,7 @@ KOMPAS-3D API. SDK не поднимает HTTP-сервер, localhost endpoint
 
 ## Установка
 
-KOMPAS-3D Guard 0.6.2 работает с обычным GIL-enabled CPython 3.10–3.14
+KOMPAS-3D Guard 0.6.5 работает с обычным GIL-enabled CPython 3.10–3.14
 на Windows x64. `pip` автоматически выбирает wheel для установленной версии
 Python:
 
@@ -33,12 +33,18 @@ Wheel также можно скачать из
 [GitHub Releases](https://github.com/dwnmf/kompas-3d-guard-bin/releases/latest):
 
 ```powershell
-python -m pip install .\kompas_3d_guard-0.6.2-cp312-cp312-win_amd64.whl
+python -m pip install .\kompas_3d_guard-0.6.5-cp312-cp312-win_amd64.whl
 ```
 
 Для Python 3.10, 3.11, 3.13 и 3.14 имя wheel содержит соответственно
 `cp310`, `cp311`, `cp313` или `cp314`. Free-threaded builds и 32-битный Python
 не поддерживаются.
+
+Ретривал, константы, пути и ГОСТ работают без дополнительных компонентов.
+Для compiler proof в `verify()` нужен **.NET Framework 4.7.2+** (на Windows 10/11
+уже есть), а сам компилятор Roslyn `csc.exe` уже встроен в wheel — см.
+[Compiler proof](#compiler-proof-net-framework-и-встроенный-csc). Для `run()`
+нужен установленный КОМПАС-3D с ProgID `KOMPAS.Application.7`.
 
 Имя пакета в PyPI остаётся `kompas-3d-guard`, а имя Python-модуля —
 `kompas_guard`.
@@ -109,6 +115,24 @@ print(batch.render("compact"))
 print(batch.inspect("Q1.R1"))
 ```
 
+### Поколение API: API7 и legacy API5
+
+Bundle содержит оба поколения KOMPAS API, и они несовместимы в одном скрипте:
+`app` — это `KompasAPI7.IApplication`, объект API7 нельзя cast'ить в `ks*`
+интерфейс API5. Поиск по умолчанию ограничен API7:
+
+```python
+guard.batch(["основная надпись"])                # api="api7" по умолчанию
+guard.batch(["основная надпись"], api="api5")    # legacy ks* API
+guard.context(task, api="any")                   # оба поколения
+```
+
+Каждый результат содержит `api_version` и `source_typelib`, compact-вывод
+печатает `api=API7`, а `context()` показывает `API|preferred=...|mixed=...`.
+Смешение поколений в одном кандидате ловится через `guard.api_lint(code)` и
+warning `API5_SYMBOL_IN_API7` в `verify()`. Enum-константы поколения не имеют:
+они живут в общих `Kompas6Constants`/`Kompas6Constants3D` и не фильтруются.
+
 ## Проверка кода и grounding для исправления
 
 ```python
@@ -122,6 +146,52 @@ print(check.feedback)
 SDK возвращает диагностику настоящего Interop-компилятора/графа и кандидатов
 API, найденных нашим RU/EN retrieval. Он не вызывает LLM и не переписывает код
 автоматически.
+
+### Compiler proof: .NET Framework и встроенный csc
+
+Backend `compiler` доказывает код не эвристикой, а реальной компиляцией
+прямолинейного Python → C# COM-кода против Interop-сборок `KompasAPI7`,
+`Kompas6API5` и `Kompas6Constants`.
+
+Компилятор уже входит в wheel: это Roslyn `csc.exe` из
+`Microsoft.Net.Compilers.Toolset` (тулсет `net472`), скачанный и проверенный
+по SHA-256 на этапе сборки, расположенный в `kompas_guard/_app/compiler/`.
+Ставить Visual Studio, .NET SDK или отдельный Roslyn не нужно, и SDK ничего
+не докачивает в runtime. Если встроенного `csc.exe` нет, SDK откатывается на
+системный `%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`.
+
+Требование одно: установленный **.NET Framework 4.7.2+**. На Windows 10/11
+он есть в системе по умолчанию. В wheel он не входит. Не путать с .NET (Core)
+8/10: netcore-вариант `csc.dll` требует отдельный runtime и здесь не
+используется.
+
+```python
+guard.verify(code, task=task, backend="auto")      # compiler, затем graph fallback
+guard.verify(code, task=task, backend="compiler")  # требовать компиляцию
+guard.verify(code, task=task, backend="graph")     # без компилятора вообще
+```
+
+Если .NET Framework отсутствует, `backend="auto"` честно сообщает
+`compiler|ok=unavailable` с кодом `COMPILER_UNAVAILABLE` и продолжает консервативной
+graph-проверкой; `backend="compiler"` в этом случае не выдаёт ложное `ok=true`,
+а возвращает отказ. Код `COMPILER_UNSUPPORTED` означает другое: компилятор есть,
+но сложная Python-конструкция не переводится в прямолинейный C#.
+
+Проверить окружение (глобальные аргументы идут до имени команды, например
+`kompas-guard --bundle D:\Core doctor`):
+
+```powershell
+kompas-guard doctor
+```
+
+`doctor` запускает найденный компилятор и показывает его состояние:
+
+```text
+compiler|ok=true|probe=ready|path=...\kompas_guard\_app\compiler\csc.exe
+```
+
+Он также проверяет регистрацию ProgID `KOMPAS.Application.7` в реестре, но не
+проверяет лицензию КОМПАС и возможность запуска в текущем desktop-сеансе.
 
 ## Запуск в живом КОМПАС
 
@@ -159,7 +229,8 @@ SHA256SUMS.txt
 ```
 
 Wheel содержит единый скомпилированный Nuitka package, публичные type stubs,
-native launcher изолированного runner и не содержит приватных Python-исходников.
+native launcher изолированного runner, встроенный Roslyn `csc.exe` (net472) для
+compiler proof и не содержит приватных Python-исходников.
 Модели и индексы публикуются отдельно на Hugging Face под CC BY-NC 4.0 и
 закрепляются в SDK неизменяемыми commit revisions.
 

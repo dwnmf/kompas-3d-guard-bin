@@ -13,7 +13,7 @@ description: Находить, проверять и исполнять KOMPAS-3
 3.10–3.14. Использовать тот Python, в котором будет работать SDK:
 
 ```powershell
-python -m pip install -U kompas-3d-guard==0.6.2
+python -m pip install -U kompas-3d-guard==0.6.5
 ```
 
 При первом `KompasGuard()` SDK скачивает закреплённый Core snapshot, сообщает
@@ -22,37 +22,41 @@ python -m pip install -U kompas-3d-guard==0.6.2
 
 ## Обязательный цикл
 
-1. Декомпозировать задачу и вызвать один `context(task)`.
-2. Собрать все RU/EN вопросы к API и вызвать один `batch(queries, k=5)`.
-3. Проверить 1–3 лучших результата. Вызывать `batch.inspect(...)`, если близки
-   scores, неоднозначен owner, есть get/set или путь помечен `partial:`.
-4. Получить числовые значения только через `enum_values`, `constant` или
+1. Декомпозировать задачу и вызвать **один** `context(task, queries=[...])`,
+   передав все RU/EN подвопросы сразу. Один этот вызов возвращает retrieval,
+   relevant enum-таблицы, доказанные acquisition paths и вердикт.
+2. Прочитать последнюю строку вывода:
+   - `READY|` — grounding полон. Немедленно писать candidate, не искать больше.
+   - `NEED|n|...` — выполнить ровно перечисленные пункты **одним батчем**
+     (`inspect_many`, `path`, `constants`), затем прекратить поиск.
+   Не добавлять «на всякий случай» вызовы сверх списка `NEED`.
+3. Получить числовые значения только через `enum_values`, `constant` или
    `constants`; получить application-domain таблицы через `app_const`.
-5. Получить отсутствующий interface путь через `path`; изучить совместимые
-   интерфейсы через `coclass`. Не придумывать cast при `found=false`.
-6. Написать новый candidate с `def run(app)` и проверить его через
+   Значения, уже пришедшие в `context`, повторно не запрашивать.
+4. Написать новый candidate с `def run(app)` и проверить его через
    `verify(..., backend="auto")`.
-7. Если пользователь явно просит исполнение, вызвать `run()` с read-only
+5. Если пользователь явно просит исполнение, вызвать `run()` с read-only
    `check` в той же сессии. Для созданных тестовых документов выбрать
    `cleanup="created"`.
-8. При сбое вернуть compact диагностику и repair prompt Guard. Не исправлять код
+6. При сбое вернуть compact диагностику и repair prompt Guard. Не исправлять код
    внешней моделью автоматически.
 
 ```python
 from kompas_guard import KompasGuard
 
 kg = KompasGuard(status=print)
-ctx = kg.context("создать деталь, эскиз на XOY, окружность, выдавливание и сохранить")
+ctx = kg.context(
+    "создать деталь, эскиз на XOY, окружность, выдавливание и сохранить",
+    queries=[
+        "получить TopPart и model container",
+        "начать редактирование эскиза и получить circles",
+        "создать base extrusion и сохранить документ",
+    ],
+)
 print(ctx.render("compact"))
 
-batch = kg.batch([
-    "создать новый документ детали API7",
-    "получить TopPart и model container",
-    "начать редактирование эскиза и получить circles",
-    "создать base extrusion и сохранить документ",
-], k=5)
-print(batch.render("compact"))
-details = batch.inspect_many(["Q1.R1", "Q2.R1", "Q3.R1"])
+# Только если последняя строка была NEED|, и только по её пунктам:
+details = ctx.batch.inspect_many(["Q1.R1", "Q2.R1"])
 ```
 
 ## Контракт candidate
@@ -69,6 +73,26 @@ def run(app):
 импортировать `win32com`, не открывать `gen_py`, Interop DLL или raw graph.
 Возвращаемое значение должно быть компактным и сериализуемым либо иметь
 безопасный `repr`.
+
+## Поколение API: API7 и legacy API5
+
+Bundle содержит оба поколения, и они несовместимы в одном candidate:
+`app` — это `KompasAPI7.IApplication`, и объект API7 нельзя cast’ить в `ks*`
+интерфейс API5. К `API5` относятся не только `ks*`, но и омонимы вроде
+`IPart`, `IDocument3D`, `ISurface`.
+
+Поиск по умолчанию ограничен API7. Явно менять только по задаче:
+
+```python
+kg.context(task, queries=[...])            # api="api7" по умолчанию
+kg.batch(["штамп"], api="api5")             # осознанный legacy-поиск
+kg.batch(["штамп"], api="any")              # оба поколения
+```
+
+В каждой строке выдачи есть `api=API7|API5`; `context()` печатает
+`API|preferred=...|mixed=...` и `API_MIX|` для чужих результатов. Не смешивать
+поколения в одном `run(app)`: `verify()` выдаёт `API5_SYMBOL_IN_API7`, а
+`kg.api_lint(code)` возвращает найденные legacy-типы.
 
 ## Поиск и точные symbols
 
@@ -111,6 +135,22 @@ print(kg.coclass("IPart7").render("compact"))
 Путь состоит из `member`, `inherit`, `coclass` и `cast` steps с provenance.
 Следовать steps буквально. `cast` действует на тот же COM-object; `member`
 получает другой object. Не заменять member-chain прямым cast.
+
+Acquisition chain доказывается относительно типа документа, который
+подразумевает задача, а не только от `IApplication`: от `IApplication`
+доказуемо лишь ~5% owner-ов, потому что cast от общего `IKompasDocument` к
+конкретному типу документа несостоятелен. Отрендеренный путь всегда начинается
+с имени своего корня, поэтому относительный путь виден как относительный.
+`context()` выбирает корни по задаче автоматически.
+
+Шаг вида `Add(args=1)` означает, что член требует аргументов: цепочка
+доказана, но значения нужно взять из signature и enum-таблиц, а не придумать.
+
+`cast` разрешён только там, где он верен для любого объекта исходного типа
+(расширение к предку либо однозначный coclass), либо над объектом, который
+объявлен как корень цепочки. Сужающий cast от базового типа (`IKompasDocument`,
+`IModelObjects`, `IDrawingObject`) в середине цепочки не доказательство, а догадка
+о том, чем оказался объект, и граф его не выдаст.
 
 Для эскиза ожидается доказуемая форма:
 

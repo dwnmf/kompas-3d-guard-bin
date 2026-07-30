@@ -1,4 +1,4 @@
-# Справочник KOMPAS Guard SDK 0.6.2
+# Справочник KOMPAS Guard SDK 0.6.5
 
 ## Содержание
 
@@ -28,15 +28,40 @@ KompasGuard(
 ### Retrieval
 
 ```python
-kg.search(query, k=5) -> list[SearchResult]
-kg.batch(queries, k=5) -> SearchBatch
-kg.context(task, k=5) -> GroundedContext
+kg.search(query, k=5, api=None) -> list[SearchResult]
+kg.batch(queries, k=5, api=None) -> SearchBatch
+kg.context(task, k=5, queries=None, api=None) -> GroundedContext
 kg.inspect(identifier, detail="compact") -> dict
+kg.api_lint(code) -> list[str]
 kg.graph_coverage_audit() -> dict
 ```
 
 `identifier` принимает document id, stable ref или однозначный exact symbol.
 При get/set ambiguity передавать stable ref результата.
+
+### Выбор поколения API
+
+Bundle содержит оба поколения: `KompasAPI7` (`API7`) и legacy `Kompas6API5`,
+`Kompas6API3D5COM`, `Kompas6API2D5COM` (`API5`, символы `ks*`, а также
+API5-интерфейсы вроде `IPart`, `IDocument3D`, `ISurface`).
+
+`api` принимает `"api7"` (по умолчанию), `"api5"` и `"any"`. Default меняется
+переменной окружения `KOMPAS_GUARD_API`. Фильтр применяется после over-fetch;
+документы без метки поколения не отбрасываются. Если после фильтра у запроса не
+остаётся ни одного результата, возвращается нефильтрованный список.
+
+Каждый `SearchResult` содержит `api_version` и `source_typelib`, и compact
+render печатает `|api=API7`. `context()` добавляет строку
+`API|preferred=...|mixed=...`, список `API_MIX|` и warning `api_mix:n`, если в
+выдаче осталось чужое поколение.
+
+Exact-symbol запрос (`ksStamp.ksOpenStamp`) не фильтруется: явный symbol
+считается сознательным выбором.
+
+```python
+kg.batch(["основная надпись"], api="api5")   # legacy ks* API
+kg.context(task, api="any")                    # оба поколения
+```
 
 ### Constants
 
@@ -114,7 +139,7 @@ kg.gost_section(gost_id, heading, k=12)
 именем команды.
 
 ```powershell
-kompas-guard search "создать окружность" "save part document" -k 5
+kompas-guard search "создать окружность" "save part document" -k 5 --api api7
 kompas-guard context "создать деталь и выдавить эскиз" -k 5
 kompas-guard inspect IPart7.DefaultObject --detail compact
 kompas-guard enum-values ksObj3dTypeEnum --contains plane
@@ -124,6 +149,7 @@ kompas-guard app-const KompasStampCellEnum
 kompas-guard path IModelContainer --from-type IPart7
 kompas-guard coclass IPart7
 kompas-guard metadata-audit
+kompas-guard doctor
 kompas-guard verify candidate.py --task "создать фланец" --backend auto
 kompas-guard run candidate.py --check check.py --cleanup created --result --verbose
 kompas-guard gost-current 2.104-2006
@@ -144,7 +170,8 @@ CLI выводит compact text для retrieval, constants, paths, verify и ru
 - `KOMPAS_GUARD_RERANKER=top3`: включить optional quality pack.
 - `KOMPAS_VERIFY_BACKEND`: `auto`, `compiler` или `graph`.
 - `KOMPAS_INTEROP_DIR`: локальная metadata directory для compiler proof.
-- `KOMPAS_CSC`: явный путь к C# compiler.
+- `KOMPAS_CSC`: явный путь к C# compiler; protected wheel сначала использует
+  встроенный Roslyn payload, затем этот override и системный fallback.
 
 Без установленного КОМПАС работают retrieval, constants, paths, GOST и graph
 verify. Live run требует Windows, зарегистрированный KOMPAS API7 и pywin32.
