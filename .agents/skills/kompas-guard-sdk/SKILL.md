@@ -193,6 +193,12 @@ print(proof.feedback)
 - `compiler`: требовать компиляцию прямолинейного Python→C# COM-кода.
 - `graph`: проверять известные owners, operations, property set и casts.
 
+Roslyn `csc.exe` встроен в wheel, но требует установленный .NET Framework 4.7.2+
+(Visual Studio и .NET SDK не нужны). Без него `auto` честно печатает
+`compiler|ok=unavailable` с `COMPILER_UNAVAILABLE` и остаётся на graph proof, а
+`backend="compiler"` возвращает отказ вместо `ok=true`. Проверять окружение
+через `kompas-guard doctor` (глобальные аргументы идут до имени команды).
+
 `ok=true` доказывает только охваченные формы. `COMPILER_UNSUPPORTED` означает,
 что сложная Python-конструкция не получила compiler proof. Исправлять только
 участок, указанный строкой и diagnostic code.
