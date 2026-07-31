@@ -164,7 +164,10 @@ IDrawingContainer.Circles → ICircles
 ```
 
 Если `PATH|found=false`, остановить генерацию проблемного участка и сообщить,
-какой переход не доказан. `UNKNOWN_CAST` не смешивать с `UNKNOWN_METHOD`.
+какой переход не доказан. `UNKNOWN_CAST` не смешивать с `UNKNOWN_METHOD`. `UNKNOWN_CAST`
+на контейнере-агрегате (`ISymbols2DContainer`, `IDrawingContainer`) — типичный
+пробел графа, а не ошибка кода: сначала минимальная проба каста с чтением
+значения обратно, и только потом включать переход в кандидат.
 
 ## Context и solid recipe
 
@@ -221,6 +224,24 @@ Roslyn `csc.exe` встроен в wheel, но требует установле
 - Для доказанного reverse extrusion использовать reverse side parameters:
   `Direction=dtReverse` и `SetSideParameters(False, ...)`; для normal — `True`.
   Middle-plane применять только после отдельной live-пробы.
+
+Не доказаны графом, но подтверждены live-пробой (0.6.5) и требуют собственной
+пробы в текущей сессии перед использованием:
+
+- `cast(IView, "ISymbols2DContainer")` — контейнер размеров и обозначений
+  чертежа: `LineDimensions`, `DiametralDimensions`. Тот же cast работает и от
+  `IDrawingContainer`.
+- `cast(IDrawingText, "IText")` — текстовое наполнение надписи на чертеже:
+  `IText.Add().Str`. У самого `IDrawingText` есть только `X`, `Y`, `Update`.
+
+На этих переходах `verify()` продолжит выдавать `UNKNOWN_CAST`, и это ожидаемо;
+общее правило про недоказанные casts не отменяется.
+
+Читать текст ячейки основной надписи через
+`IStamp.Text(id).TextLine(0).Str.split("$|")[0].strip()`: многострочная ячейка
+возвращает строки, склеенные внутренним разделителем КОМПАС, например
+`Плита-фланец$|$|$|`. Точное равенство на таком значении даёт ложный
+`check_ok=false` при корректном документе.
 
 Каждый `Update()`, `EndEdit()`, `SetSideParameters()` и `Valid` проверять явно;
 при `false` бросать исключение до `SaveAs`. После построения скрыть эскизы и
